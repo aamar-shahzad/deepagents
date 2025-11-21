@@ -24,9 +24,9 @@ def main():
     script_dir = Path(__file__).parent
     os.chdir(script_dir)
     
-    # Check Python version
+    # Check Python version (deepagents requires Python 3.11+)
     if sys.version_info < (3, 11):
-        print("❌ Python 3.11 or higher is required")
+        print("❌ Python 3.11 or higher is required (deepagents dependency)")
         sys.exit(1)
     
     processes = []
@@ -57,7 +57,7 @@ def main():
                 check=True
             )
             subprocess.run(
-                [str(pip_path), "install", "-q", "../"],
+                [str(pip_path), "install", "-q", "../../"],
                 check=True,
                 cwd=script_dir / "backend"
             )

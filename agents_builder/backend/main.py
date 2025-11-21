@@ -23,15 +23,20 @@ app = FastAPI(
 )
 
 # Configure CORS
+# WARNING: For production, replace "*" with specific allowed origins
+# Example: allow_origins=["https://yourdomain.com"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify actual origins
+    allow_origins=["*"],  # Development only - allows all origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# In-memory storage for agents (in production, use a database)
+# In-memory storage for agents
+# WARNING: This is NOT persistent and NOT thread-safe for production use.
+# For production, use a proper database (PostgreSQL, MongoDB, etc.)
+# Data will be lost when the server restarts.
 agents_store: dict[str, Any] = {}
 
 
