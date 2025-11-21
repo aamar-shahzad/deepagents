@@ -12,6 +12,23 @@ a **planning tool**, **sub agents**, access to a **file system**, and a **detail
 
 **Acknowledgements: This project was primarily inspired by Claude Code, and initially was largely an attempt to see what made Claude Code general purpose, and make it even more so.**
 
+## 🎨 Agents Builder UI
+
+NEW! We've added a full-stack web application for visually creating and managing deep agents. Check out the [Agents Builder](agents_builder/README.md) for a user-friendly interface to:
+
+- Create agents through a web UI
+- Configure system prompts and subagents visually
+- Execute agents and see results in real-time
+- Manage multiple agents easily
+
+To get started with the UI:
+```bash
+cd agents_builder
+python run.py
+```
+
+Then visit `http://localhost:8080` in your browser!
+
 ## Installation
 
 ```bash
