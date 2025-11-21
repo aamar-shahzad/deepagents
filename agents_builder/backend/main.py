@@ -1,16 +1,14 @@
-"""
-Agents Builder Backend API
+"""Agents Builder Backend API
 
 A FastAPI application for creating and managing deep agents.
 """
 
-import os
-from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+import logging
+from typing import Any
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-import logging
+from pydantic import BaseModel, Field
 
 from deepagents import create_deep_agent
 
@@ -34,14 +32,14 @@ app.add_middleware(
 )
 
 # In-memory storage for agents (in production, use a database)
-agents_store: Dict[str, Any] = {}
+agents_store: dict[str, Any] = {}
 
 
 class ToolConfig(BaseModel):
     """Configuration for a tool"""
     name: str
     description: str
-    parameters: Dict[str, Any] = Field(default_factory=dict)
+    parameters: dict[str, Any] = Field(default_factory=dict)
 
 
 class SubAgentConfig(BaseModel):
@@ -49,16 +47,16 @@ class SubAgentConfig(BaseModel):
     name: str
     description: str
     system_prompt: str
-    tools: List[str] = Field(default_factory=list)
+    tools: list[str] = Field(default_factory=list)
 
 
 class AgentConfig(BaseModel):
     """Configuration for creating a deep agent"""
     name: str
     system_prompt: str
-    tools: List[str] = Field(default_factory=list)
-    subagents: List[SubAgentConfig] = Field(default_factory=list)
-    model: Optional[str] = None
+    tools: list[str] = Field(default_factory=list)
+    subagents: list[SubAgentConfig] = Field(default_factory=list)
+    model: str | None = None
     use_longterm_memory: bool = False
 
 
@@ -147,22 +145,22 @@ async def create_agent(config: AgentConfig):
     """Create a new deep agent"""
     try:
         logger.info(f"Creating agent: {config.name}")
-        
+
         # Check if agent already exists
         if config.name in agents_store:
             raise HTTPException(status_code=400, detail="Agent already exists")
-        
+
         # Create the agent
         agent_config = {
             "system_prompt": config.system_prompt,
         }
-        
+
         if config.model:
             agent_config["model"] = config.model
-        
+
         if config.use_longterm_memory:
             agent_config["use_longterm_memory"] = True
-        
+
         # Create subagents if specified
         if config.subagents:
             subagents = []
@@ -174,19 +172,19 @@ async def create_agent(config: AgentConfig):
                     "tools": []  # Tools would need to be resolved
                 })
             agent_config["subagents"] = subagents
-        
+
         # Create the agent (note: tools need to be actual function objects)
         agent = create_deep_agent(**agent_config)
-        
+
         # Store agent configuration
         agents_store[config.name] = {
             "config": config.model_dump(),
             "agent": agent,
             "created_at": None  # Could add timestamp
         }
-        
+
         logger.info(f"Agent created successfully: {config.name}")
-        
+
         return {
             "status": "success",
             "message": f"Agent '{config.name}' created successfully",
@@ -195,9 +193,12 @@ async def create_agent(config: AgentConfig):
                 "system_prompt": config.system_prompt[:100] + "..." if len(config.system_prompt) > 100 else config.system_prompt
             }
         }
-    
+
+    except HTTPException:
+        # Re-raise HTTP exceptions without wrapping
+        raise
     except Exception as e:
-        logger.error(f"Error creating agent: {str(e)}")
+        logger.error(f"Error creating agent: {e!s}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -208,13 +209,13 @@ async def list_agents():
     for name, data in agents_store.items():
         agents.append({
             "name": name,
-            "system_prompt": data["config"]["system_prompt"][:100] + "..." 
-                           if len(data["config"]["system_prompt"]) > 100 
+            "system_prompt": data["config"]["system_prompt"][:100] + "..."
+                           if len(data["config"]["system_prompt"]) > 100
                            else data["config"]["system_prompt"],
             "num_subagents": len(data["config"].get("subagents", [])),
             "model": data["config"].get("model", "claude-sonnet-4-5-20250929")
         })
-    
+
     return {"agents": agents, "count": len(agents)}
 
 
@@ -223,7 +224,7 @@ async def get_agent(agent_name: str):
     """Get details of a specific agent"""
     if agent_name not in agents_store:
         raise HTTPException(status_code=404, detail="Agent not found")
-    
+
     data = agents_store[agent_name]
     return {
         "name": agent_name,
@@ -232,24 +233,24 @@ async def get_agent(agent_name: str):
 
 
 @app.post("/agents/{agent_name}/execute")
-async def execute_agent(agent_name: str, request: Dict[str, str]):
+async def execute_agent(agent_name: str, request: dict[str, str]):
     """Execute an agent with a message"""
     try:
         if agent_name not in agents_store:
             raise HTTPException(status_code=404, detail="Agent not found")
-        
+
         message = request.get("message")
         if not message:
             raise HTTPException(status_code=400, detail="Message is required")
-        
+
         logger.info(f"Executing agent: {agent_name}")
         agent = agents_store[agent_name]["agent"]
-        
+
         # Execute the agent
         result = agent.invoke({
             "messages": [{"role": "user", "content": message}]
         })
-        
+
         # Extract the response
         response_content = ""
         if "messages" in result and len(result["messages"]) > 0:
@@ -260,15 +261,18 @@ async def execute_agent(agent_name: str, request: Dict[str, str]):
                 response_content = last_message.get("content", str(last_message))
             else:
                 response_content = str(last_message)
-        
+
         return {
             "status": "success",
             "agent_name": agent_name,
             "response": response_content
         }
-    
+
+    except HTTPException:
+        # Re-raise HTTP exceptions without wrapping
+        raise
     except Exception as e:
-        logger.error(f"Error executing agent: {str(e)}")
+        logger.error(f"Error executing agent: {e!s}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -277,9 +281,9 @@ async def delete_agent(agent_name: str):
     """Delete an agent"""
     if agent_name not in agents_store:
         raise HTTPException(status_code=404, detail="Agent not found")
-    
+
     del agents_store[agent_name]
-    
+
     return {
         "status": "success",
         "message": f"Agent '{agent_name}' deleted successfully"
