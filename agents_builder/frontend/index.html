@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deep Agents Builder</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🧠🤖 Deep Agents Builder</h1>
+            <p class="subtitle">Create and manage AI agents powered by deepagents</p>
+        </header>
+
+        <div class="main-content">
+            <!-- Left Panel - Agent Configuration -->
+            <div class="panel config-panel">
+                <h2>Create New Agent</h2>
+                
+                <form id="agent-form">
+                    <input type="hidden" id="edit-mode" value="false">
+                    <input type="hidden" id="original-name" value="">
+                    
+                    <div class="form-group">
+                        <label for="agent-name">Agent Name *</label>
+                        <input 
+                            type="text" 
+                            id="agent-name" 
+                            name="name" 
+                            placeholder="my-research-agent"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="agent-description">Description</label>
+                        <input 
+                            type="text" 
+                            id="agent-description" 
+                            name="description" 
+                            placeholder="A brief description of what this agent does"
+                        >
+                        <small>Optional: Helps you identify the agent's purpose</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="model-select">Model</label>
+                        <select id="model-select" name="model">
+                            <option value="">Default (Claude Sonnet 4.5)</option>
+                            <option value="openai:gpt-4o">GPT-4o</option>
+                            <option value="anthropic:claude-sonnet-4-20250514">Claude Sonnet 4</option>
+                            <option value="openai:gpt-4-turbo">GPT-4 Turbo</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="system-prompt">System Prompt *</label>
+                        <textarea 
+                            id="system-prompt" 
+                            name="system_prompt" 
+                            rows="8"
+                            placeholder="You are an expert researcher. Your job is to conduct thorough research..."
+                            required
+                        ></textarea>
+                        <small>Define the agent's role, capabilities, and instructions</small>
+                    </div>
+
+                    <div class="form-group checkbox-group">
+                        <label>
+                            <input type="checkbox" id="use-memory" name="use_longterm_memory">
+                            Enable Long-term Memory
+                        </label>
+                    </div>
+
+                    <div class="form-group checkbox-group">
+                        <label>
+                            <input type="checkbox" id="debug-mode" name="debug">
+                            Enable Debug Mode
+                        </label>
+                        <small>Provides detailed execution information</small>
+                    </div>
+
+                    <div class="form-group">
+                        <h3>Available Tools</h3>
+                        <div class="tools-info">
+                            <div class="tool-item">
+                                <strong>📝 Planning:</strong> write_todos (built-in)
+                            </div>
+                            <div class="tool-item">
+                                <strong>📁 Filesystem:</strong> ls, read_file, write_file, edit_file (built-in)
+                            </div>
+                            <div class="tool-item">
+                                <strong>👥 Subagents:</strong> task (built-in)
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <h3>Subagents (Optional)</h3>
+                        <div id="subagents-container">
+                            <!-- Subagents will be added dynamically -->
+                        </div>
+                        <button type="button" class="btn btn-secondary" onclick="addSubagent()">
+                            + Add Subagent
+                        </button>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" id="submit-btn" class="btn btn-primary">Create Agent</button>
+                        <button type="button" id="cancel-btn" class="btn btn-secondary" onclick="cancelEdit()" style="display: none;">Cancel</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Right Panel - Agent List and Execution -->
+            <div class="panel agents-panel">
+                <h2>My Agents</h2>
+                
+                <div id="agents-list" class="agents-list">
+                    <p class="empty-state">No agents created yet. Create your first agent!</p>
+                </div>
+
+                <div id="execution-panel" class="execution-panel" style="display: none;">
+                    <h3>Execute Agent: <span id="current-agent-name"></span></h3>
+                    
+                    <div class="form-group">
+                        <label for="user-message">Message</label>
+                        <textarea 
+                            id="user-message" 
+                            rows="4"
+                            placeholder="What would you like the agent to do?"
+                        ></textarea>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="executeAgent()">
+                        Run Agent
+                    </button>
+
+                    <div id="execution-result" class="execution-result"></div>
+                    
+                    <div class="history-section">
+                        <h4>Execution History</h4>
+                        <button class="btn btn-secondary" onclick="loadExecutionHistory()">
+                            📊 View History
+                        </button>
+                        <div id="history-list" class="history-list"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Toast -->
+    <div id="toast" class="toast"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
