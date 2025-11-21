@@ -161,5 +161,80 @@ def test_create_agent_with_subagents():
     assert len(data["config"]["subagents"]) == 1
 
 
+def test_update_agent():
+    """Test updating an existing agent"""
+    # First create an agent
+    agent_config = {
+        "name": "update-test-agent",
+        "description": "Original description",
+        "system_prompt": "Original prompt",
+        "debug": False
+    }
+    client.post("/agents/create", json=agent_config)
+    
+    # Update the agent
+    updated_config = {
+        "name": "update-test-agent",
+        "description": "Updated description",
+        "system_prompt": "Updated prompt",
+        "debug": True
+    }
+    
+    response = client.put("/agents/update-test-agent", json=updated_config)
+    assert response.status_code == 200
+    
+    # Verify the update
+    response = client.get("/agents/update-test-agent")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["config"]["description"] == "Updated description"
+    assert data["config"]["system_prompt"] == "Updated prompt"
+    assert data["config"]["debug"] is True
+
+
+def test_execution_history():
+    """Test execution history tracking"""
+    # Create an agent
+    agent_config = {
+        "name": "history-test-agent",
+        "system_prompt": "You are a test agent"
+    }
+    client.post("/agents/create", json=agent_config)
+    
+    # Get initial history (should be empty)
+    response = client.get("/agents/history-test-agent/history")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["history"]) == 0
+    
+    # Note: Actual execution test would require the agent to work
+    # which needs proper API keys, so we skip that part
+
+
+def test_agent_with_description_and_debug():
+    """Test creating agent with description and debug mode"""
+    agent_config = {
+        "name": "feature-test-agent",
+        "description": "An agent with all features",
+        "system_prompt": "You are a feature-rich agent",
+        "debug": True,
+        "use_longterm_memory": False
+    }
+    
+    response = client.post("/agents/create", json=agent_config)
+    assert response.status_code == 200
+    
+    # Verify the features are saved
+    response = client.get("/agents")
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Find our agent
+    agent = next((a for a in data["agents"] if a["name"] == "feature-test-agent"), None)
+    assert agent is not None
+    assert agent["description"] == "An agent with all features"
+    assert agent["debug"] is True
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

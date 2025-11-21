@@ -56,24 +56,37 @@ function displayAgents(agents) {
         return;
     }
     
-    agentsList.innerHTML = agents.map(agent => `
+    agentsList.innerHTML = agents.map(agent => {
+        const badges = [];
+        if (agent.debug) badges.push('<span class="badge debug">DEBUG</span>');
+        if (agent.use_longterm_memory) badges.push('<span class="badge memory">MEMORY</span>');
+        
+        const description = agent.description ? `<p style="font-style: italic; font-size: 0.85rem;">${agent.description}</p>` : '';
+        
+        return `
         <div class="agent-card">
-            <h4>${agent.name}</h4>
+            <h4>${agent.name}${badges.join('')}</h4>
+            ${description}
             <p>${agent.system_prompt}</p>
             <div class="meta">
                 Model: ${agent.model || 'Claude Sonnet 4.5'} | 
-                Subagents: ${agent.num_subagents || 0}
+                Subagents: ${agent.num_subagents || 0} | 
+                Executions: ${agent.execution_count || 0}
             </div>
             <div class="agent-actions">
                 <button class="btn btn-success" onclick="selectAgent('${agent.name}')">
                     Execute
+                </button>
+                <button class="btn btn-secondary" onclick="editAgent('${agent.name}')">
+                    Edit
                 </button>
                 <button class="btn btn-danger" onclick="deleteAgent('${agent.name}')">
                     Delete
                 </button>
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 /**
@@ -83,22 +96,26 @@ function setupFormHandler() {
     const form = document.getElementById('agent-form');
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        await createAgent();
+        await createOrUpdateAgent();
     });
 }
 
 /**
- * Create a new agent
+ * Create or update an agent
  */
-async function createAgent() {
+async function createOrUpdateAgent() {
     const formData = new FormData(document.getElementById('agent-form'));
+    const isEditMode = document.getElementById('edit-mode').value === 'true';
+    const originalName = document.getElementById('original-name').value;
     
     // Build the agent configuration
     const config = {
         name: formData.get('name'),
+        description: formData.get('description') || '',
         system_prompt: formData.get('system_prompt'),
         model: formData.get('model') || null,
         use_longterm_memory: document.getElementById('use-memory').checked,
+        debug: document.getElementById('debug-mode').checked,
         tools: [], // Built-in tools are always available
         subagents: []
     };
@@ -121,8 +138,14 @@ async function createAgent() {
     });
     
     try {
-        const response = await fetch(`${API_BASE_URL}/agents/create`, {
-            method: 'POST',
+        const url = isEditMode 
+            ? `${API_BASE_URL}/agents/${originalName}`
+            : `${API_BASE_URL}/agents/create`;
+        
+        const method = isEditMode ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+            method: method,
             headers: {
                 'Content-Type': 'application/json',
             },
@@ -131,22 +154,93 @@ async function createAgent() {
         
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.detail || 'Failed to create agent');
+            throw new Error(error.detail || `Failed to ${isEditMode ? 'update' : 'create'} agent`);
         }
         
         const result = await response.json();
-        showToast(`Agent "${config.name}" created successfully!`, 'success');
+        showToast(`Agent "${config.name}" ${isEditMode ? 'updated' : 'created'} successfully!`, 'success');
         
         // Reset form and reload agents
-        document.getElementById('agent-form').reset();
-        document.getElementById('subagents-container').innerHTML = '';
-        subagentCounter = 0;
+        cancelEdit();
         loadAgents();
         
     } catch (error) {
-        console.error('Error creating agent:', error);
+        console.error(`Error ${isEditMode ? 'updating' : 'creating'} agent:`, error);
         showToast(error.message, 'error');
     }
+}
+
+/**
+ * Edit an existing agent
+ */
+async function editAgent(agentName) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/agents/${agentName}`);
+        if (!response.ok) {
+            throw new Error('Failed to load agent details');
+        }
+        
+        const data = await response.json();
+        const config = data.config;
+        
+        // Populate form with agent data
+        document.getElementById('agent-name').value = config.name;
+        document.getElementById('agent-name').readOnly = true; // Can't change name
+        document.getElementById('agent-description').value = config.description || '';
+        document.getElementById('system-prompt').value = config.system_prompt;
+        document.getElementById('model-select').value = config.model || '';
+        document.getElementById('use-memory').checked = config.use_longterm_memory || false;
+        document.getElementById('debug-mode').checked = config.debug || false;
+        
+        // Clear and populate subagents
+        document.getElementById('subagents-container').innerHTML = '';
+        subagentCounter = 0;
+        
+        if (config.subagents && config.subagents.length > 0) {
+            config.subagents.forEach(subagent => {
+                addSubagent();
+                const container = document.getElementById(`subagent-${subagentCounter}`);
+                if (container) {
+                    const nameInput = container.querySelector('[name="subagent_name"]');
+                    const descInput = container.querySelector('[name="subagent_description"]');
+                    const promptInput = container.querySelector('[name="subagent_prompt"]');
+                    
+                    if (nameInput) nameInput.value = subagent.name;
+                    if (descInput) descInput.value = subagent.description;
+                    if (promptInput) promptInput.value = subagent.system_prompt;
+                }
+            });
+        }
+        
+        // Set edit mode
+        document.getElementById('edit-mode').value = 'true';
+        document.getElementById('original-name').value = agentName;
+        document.getElementById('submit-btn').textContent = 'Update Agent';
+        document.getElementById('cancel-btn').style.display = 'inline-block';
+        
+        // Scroll to form
+        document.querySelector('.config-panel').scrollIntoView({ behavior: 'smooth' });
+        
+        showToast(`Editing agent: ${agentName}`, 'info');
+        
+    } catch (error) {
+        console.error('Error loading agent for edit:', error);
+        showToast(error.message, 'error');
+    }
+}
+
+/**
+ * Cancel edit mode
+ */
+function cancelEdit() {
+    document.getElementById('agent-form').reset();
+    document.getElementById('subagents-container').innerHTML = '';
+    subagentCounter = 0;
+    document.getElementById('edit-mode').value = 'false';
+    document.getElementById('original-name').value = '';
+    document.getElementById('agent-name').readOnly = false;
+    document.getElementById('submit-btn').textContent = 'Create Agent';
+    document.getElementById('cancel-btn').style.display = 'none';
 }
 
 /**
@@ -302,6 +396,63 @@ async function deleteAgent(agentName) {
         
     } catch (error) {
         console.error('Error deleting agent:', error);
+        showToast(error.message, 'error');
+    }
+}
+
+/**
+ * Load execution history for the current agent
+ */
+async function loadExecutionHistory() {
+    if (!currentAgent) {
+        showToast('No agent selected', 'error');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/agents/${currentAgent}/history?limit=10`);
+        if (!response.ok) {
+            throw new Error('Failed to load execution history');
+        }
+        
+        const data = await response.json();
+        const historyList = document.getElementById('history-list');
+        
+        if (!data.history || data.history.length === 0) {
+            historyList.innerHTML = '<p class="empty-state" style="padding: 1rem;">No execution history yet.</p>';
+            return;
+        }
+        
+        historyList.innerHTML = data.history.map(item => {
+            const date = new Date(item.timestamp).toLocaleString();
+            const statusClass = item.status === 'error' ? 'error' : '';
+            const executionTime = item.execution_time ? `${item.execution_time.toFixed(2)}s` : 'N/A';
+            
+            // Escape HTML to prevent XSS
+            const escapeHtml = (text) => {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            };
+            
+            const safeMessage = escapeHtml(item.message);
+            const safeResponse = escapeHtml(item.response.substring(0, 200));
+            const ellipsis = item.response.length > 200 ? '...' : '';
+            
+            return `
+                <div class="history-item ${statusClass}">
+                    <div class="timestamp">🕐 ${date}</div>
+                    <div class="message"><strong>Message:</strong> ${safeMessage}</div>
+                    <div class="response"><strong>Response:</strong> ${safeResponse}${ellipsis}</div>
+                    <div class="execution-time">⏱️ Execution time: ${executionTime}</div>
+                </div>
+            `;
+        }).join('');
+        
+        showToast(`Loaded ${data.history.length} execution(s)`, 'success');
+        
+    } catch (error) {
+        console.error('Error loading execution history:', error);
         showToast(error.message, 'error');
     }
 }

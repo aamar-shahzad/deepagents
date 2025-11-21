@@ -19,6 +19,9 @@
                 <h2>Create New Agent</h2>
                 
                 <form id="agent-form">
+                    <input type="hidden" id="edit-mode" value="false">
+                    <input type="hidden" id="original-name" value="">
+                    
                     <div class="form-group">
                         <label for="agent-name">Agent Name *</label>
                         <input 
@@ -28,6 +31,17 @@
                             placeholder="my-research-agent"
                             required
                         >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="agent-description">Description</label>
+                        <input 
+                            type="text" 
+                            id="agent-description" 
+                            name="description" 
+                            placeholder="A brief description of what this agent does"
+                        >
+                        <small>Optional: Helps you identify the agent's purpose</small>
                     </div>
 
                     <div class="form-group">
@@ -59,6 +73,14 @@
                         </label>
                     </div>
 
+                    <div class="form-group checkbox-group">
+                        <label>
+                            <input type="checkbox" id="debug-mode" name="debug">
+                            Enable Debug Mode
+                        </label>
+                        <small>Provides detailed execution information</small>
+                    </div>
+
                     <div class="form-group">
                         <h3>Available Tools</h3>
                         <div class="tools-info">
@@ -84,7 +106,10 @@
                         </button>
                     </div>
 
-                    <button type="submit" class="btn btn-primary">Create Agent</button>
+                    <div class="form-actions">
+                        <button type="submit" id="submit-btn" class="btn btn-primary">Create Agent</button>
+                        <button type="button" id="cancel-btn" class="btn btn-secondary" onclick="cancelEdit()" style="display: none;">Cancel</button>
+                    </div>
                 </form>
             </div>
 
@@ -113,6 +138,14 @@
                     </button>
 
                     <div id="execution-result" class="execution-result"></div>
+                    
+                    <div class="history-section">
+                        <h4>Execution History</h4>
+                        <button class="btn btn-secondary" onclick="loadExecutionHistory()">
+                            📊 View History
+                        </button>
+                        <div id="history-list" class="history-list"></div>
+                    </div>
                 </div>
             </div>
         </div>

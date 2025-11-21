@@ -39,6 +39,9 @@ app.add_middleware(
 # Data will be lost when the server restarts.
 agents_store: dict[str, Any] = {}
 
+# Execution history storage
+execution_history: dict[str, list[dict[str, Any]]] = {}
+
 
 class ToolConfig(BaseModel):
     """Configuration for a tool"""
@@ -58,11 +61,13 @@ class SubAgentConfig(BaseModel):
 class AgentConfig(BaseModel):
     """Configuration for creating a deep agent"""
     name: str
+    description: str = ""
     system_prompt: str
     tools: list[str] = Field(default_factory=list)
     subagents: list[SubAgentConfig] = Field(default_factory=list)
     model: str | None = None
     use_longterm_memory: bool = False
+    debug: bool = False
 
 
 class AgentExecuteRequest(BaseModel):
@@ -88,7 +93,9 @@ async def root():
             "/agents": "List all agents",
             "/agents/create": "Create a new agent",
             "/agents/{name}": "Get agent details",
+            "/agents/{name}": "Update an agent (PUT)",
             "/agents/{name}/execute": "Execute an agent",
+            "/agents/{name}/history": "Get execution history",
             "/tools": "List available tools",
         }
     }
@@ -165,6 +172,9 @@ async def create_agent(config: AgentConfig):
 
         if config.use_longterm_memory:
             agent_config["use_longterm_memory"] = True
+        
+        if config.debug:
+            agent_config["debug"] = True
 
         # Create subagents if specified
         if config.subagents:
@@ -212,13 +222,18 @@ async def list_agents():
     """List all created agents"""
     agents = []
     for name, data in agents_store.items():
+        config = data["config"]
         agents.append({
             "name": name,
-            "system_prompt": data["config"]["system_prompt"][:100] + "..."
-                           if len(data["config"]["system_prompt"]) > 100
-                           else data["config"]["system_prompt"],
-            "num_subagents": len(data["config"].get("subagents", [])),
-            "model": data["config"].get("model", "claude-sonnet-4-5-20250929")
+            "description": config.get("description", ""),
+            "system_prompt": config["system_prompt"][:100] + "..."
+                           if len(config["system_prompt"]) > 100
+                           else config["system_prompt"],
+            "num_subagents": len(config.get("subagents", [])),
+            "model": config.get("model", "claude-sonnet-4-5-20250929"),
+            "debug": config.get("debug", False),
+            "use_longterm_memory": config.get("use_longterm_memory", False),
+            "execution_count": len(execution_history.get(name, []))
         })
 
     return {"agents": agents, "count": len(agents)}
@@ -240,6 +255,8 @@ async def get_agent(agent_name: str):
 @app.post("/agents/{agent_name}/execute")
 async def execute_agent(agent_name: str, request: dict[str, str]):
     """Execute an agent with a message"""
+    import datetime
+    
     try:
         if agent_name not in agents_store:
             raise HTTPException(status_code=404, detail="Agent not found")
@@ -250,11 +267,16 @@ async def execute_agent(agent_name: str, request: dict[str, str]):
 
         logger.info(f"Executing agent: {agent_name}")
         agent = agents_store[agent_name]["agent"]
+        
+        start_time = datetime.datetime.now()
 
         # Execute the agent
         result = agent.invoke({
             "messages": [{"role": "user", "content": message}]
         })
+        
+        end_time = datetime.datetime.now()
+        execution_time = (end_time - start_time).total_seconds()
 
         # Extract the response
         response_content = ""
@@ -266,11 +288,24 @@ async def execute_agent(agent_name: str, request: dict[str, str]):
                 response_content = last_message.get("content", str(last_message))
             else:
                 response_content = str(last_message)
+        
+        # Save to execution history
+        if agent_name not in execution_history:
+            execution_history[agent_name] = []
+        
+        execution_history[agent_name].append({
+            "timestamp": start_time.isoformat(),
+            "message": message,
+            "response": response_content,
+            "execution_time": execution_time,
+            "status": "success"
+        })
 
         return {
             "status": "success",
             "agent_name": agent_name,
-            "response": response_content
+            "response": response_content,
+            "execution_time": execution_time
         }
 
     except HTTPException:
@@ -278,7 +313,103 @@ async def execute_agent(agent_name: str, request: dict[str, str]):
         raise
     except Exception as e:
         logger.error(f"Error executing agent: {e!s}")
+        
+        # Save failed execution to history
+        if agent_name in agents_store:
+            if agent_name not in execution_history:
+                execution_history[agent_name] = []
+            
+            # Use the message variable that was already extracted
+            error_message = message if 'message' in locals() else request.get("message", "")
+            
+            execution_history[agent_name].append({
+                "timestamp": datetime.datetime.now().isoformat(),
+                "message": error_message,
+                "response": str(e),
+                "execution_time": 0,
+                "status": "error"
+            })
+        
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/agents/{agent_name}")
+async def update_agent(agent_name: str, config: AgentConfig):
+    """Update an existing agent"""
+    try:
+        if agent_name not in agents_store:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        
+        # Verify the name matches
+        if config.name != agent_name:
+            raise HTTPException(status_code=400, detail="Agent name cannot be changed")
+        
+        logger.info(f"Updating agent: {agent_name}")
+        
+        # Create the updated agent with new configuration
+        agent_config = {
+            "system_prompt": config.system_prompt,
+        }
+        
+        if config.model:
+            agent_config["model"] = config.model
+        
+        if config.use_longterm_memory:
+            agent_config["use_longterm_memory"] = True
+        
+        if config.debug:
+            agent_config["debug"] = True
+        
+        # Create subagents if specified
+        if config.subagents:
+            subagents = []
+            for subagent in config.subagents:
+                subagents.append({
+                    "name": subagent.name,
+                    "description": subagent.description,
+                    "system_prompt": subagent.system_prompt,
+                    "tools": []
+                })
+            agent_config["subagents"] = subagents
+        
+        # Recreate the agent
+        agent = create_deep_agent(**agent_config)
+        
+        # Update stored configuration
+        agents_store[agent_name]["config"] = config.model_dump()
+        agents_store[agent_name]["agent"] = agent
+        
+        logger.info(f"Agent updated successfully: {agent_name}")
+        
+        return {
+            "status": "success",
+            "message": f"Agent '{agent_name}' updated successfully",
+            "agent": {
+                "name": config.name,
+                "description": config.description
+            }
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating agent: {e!s}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/agents/{agent_name}/history")
+async def get_execution_history(agent_name: str, limit: int = 10):
+    """Get execution history for an agent"""
+    if agent_name not in agents_store:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    history = execution_history.get(agent_name, [])
+    # Return most recent executions first
+    return {
+        "agent_name": agent_name,
+        "history": history[-limit:][::-1],
+        "total": len(history)
+    }
 
 
 @app.delete("/agents/{agent_name}")
@@ -288,6 +419,10 @@ async def delete_agent(agent_name: str):
         raise HTTPException(status_code=404, detail="Agent not found")
 
     del agents_store[agent_name]
+    
+    # Also delete execution history
+    if agent_name in execution_history:
+        del execution_history[agent_name]
 
     return {
         "status": "success",
