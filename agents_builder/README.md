@@ -99,9 +99,55 @@ cd agents_builder/frontend
 ### Managing Agents
 
 - **View All Agents**: See all created agents in the right panel
+- **Edit Agent**: Click the "Edit" button to modify an existing agent
+- **View History**: Click "View History" to see past executions
 - **Delete Agent**: Click the "Delete" button on any agent card
 
-## API Endpoints
+## 🔌 Using the API Programmatically
+
+The Agents Builder provides a full REST API for programmatic access. You can create, manage, and execute agents from any programming language.
+
+### Quick API Example (Python)
+
+```python
+import requests
+
+# Create an agent
+response = requests.post("http://localhost:8000/agents/create", json={
+    "name": "my-agent",
+    "description": "A helpful agent",
+    "system_prompt": "You are a helpful assistant",
+    "debug": True
+})
+
+# Execute the agent
+response = requests.post("http://localhost:8000/agents/my-agent/execute", json={
+    "message": "Hello, what can you do?"
+})
+print(response.json()["response"])
+```
+
+### Complete API Documentation
+
+For comprehensive API documentation with examples in Python, JavaScript, and cURL:
+
+📖 **[View Complete API Usage Guide](API_USAGE.md)**
+
+The API Usage Guide includes:
+- All 10 API endpoints with examples
+- Python SDK class for easy integration
+- Error handling patterns
+- Async execution examples
+- Parallel agent execution
+- Best practices
+
+### Interactive API Documentation
+
+Once the backend is running, visit:
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+
+## API Endpoints Summary
 
 ### GET /
 Root endpoint with API information
